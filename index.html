@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Movable Line Angle Demo</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    canvas {
+      border: 1px solid #ccc;
+      margin-top: 20px;
+    }
+  </style>
+  <script src="basic-geometry.js"></script>
+</head>
+
+<body>
+  <h2>Adjust Angle</h2>
+
+  <div>
+
+    <p>Drag the red endpoint of the line to change the angle.</p>
+    <p>Use the "fixed delta" checkbox to have a fixed distance from corner to circle,<br /> otherwise the radius is
+      fixed.
+    </p>
+  </div>
+
+  <div style="display: flex; flex-direction: column;">
+    <label for="radius">Radius (px)</label>
+    <input type="number" name="radius" id="radius" value="20" />
+  </div>
+  <div style="display: flex; flex-direction: column;">
+    <label for="delta">Delta (px)</label>
+    <input type="number" name="delta: distance corner to circle" id="delta" value="10" />
+  </div>
+  <div>
+    <input type="checkbox" id="fix-delta" name="fixed delta" value="fd" />
+    <label for="fix-delta">Fixed delta</label>
+  </div>
+
+  <canvas id="canvas" width="500" height="400"></canvas>
+
+  <p>Angle = <span id="current-angle">?</span>.</p>
+
+  <script>
+    const canvas = document.getElementById("canvas");
+    const radiusInput = document.getElementById("radius");
+    const deltaInput = document.getElementById("delta");
+    const fixDelta = document.getElementById("fix-delta");
+
+    const currentAngle = document.getElementById("current-angle");
+    const notes = document.getElementById("notes");
+
+    const ctx = canvas.getContext("2d");
+
+    const fixedStart = { x: 100, y: 200 };
+    const fixedEnd = { x: 300, y: 200 }; // horizontal fixed line
+
+    // Movable line shares the left endpoint with the fixed line
+    const movable = { x: 250, y: 300 }; // initial position
+    const direction = { x: 0, y: 0 };
+
+    let dragging = false;
+
+    function drawLine(from, direction, strokeStyle) {
+      ctx.beginPath();
+      ctx.moveTo(from.x, from.y);
+      ctx.lineTo(from.x + direction.x, from.y + direction.y);
+      ctx.strokeStyle = strokeStyle;
+      ctx.stroke(); // Render the path
+    }
+
+    function drawStatic() {
+      // Draw fixed line
+      ctx.beginPath();
+      ctx.moveTo(fixedStart.x, fixedStart.y);
+      ctx.lineTo(fixedEnd.x, fixedEnd.y);
+      ctx.strokeStyle = "black";
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    }
+
+    /**
+     * get the radius when you want to have a fixed distance between the corner and the circle
+     */
+    function radiusByFixedDelta(obj) {
+      // helper variables without good names/meaning
+      let x = 1 / Math.tan(obj.radians / 2);
+      let y = Math.sqrt(x * x + 1)
+      return obj.d / (y - 1);
+    }
+
+    /**
+     * round a corner (with the radius or delta from the input element), where two line segments are defined as follows:
+     * in startingPoint we have vector1, which points to the corner point that we want to round out
+     * vector2 goes out from there defining the angle between the line segments 
+     */
+    function roundCorner(startingPoint, vector1, vector2) {
+
+      // reverse vector 1 to get the correct angle between the vectors by having them "both point outwards"
+      let angle = getAngleByVector(scalarProd(-1, vector1), vector2);
+      currentAngle.innerText = `${Math.round(angle.degrees)} degrees`;
+
+      // get the radius either from the input element or defined by the distance between the corner and the circle
+      let radius = fixDelta.checked ? radiusByFixedDelta({ d: deltaInput.value ?? 10, radians: angle.radians }) : radiusInput.value;
+
+      // for angles between 180 and 360 degrees, we need to adjust with the factor -1
+      let orthDirection = angle.degrees > 180 ? -1 : 1;
+
+      // compute the length we'd need to cut off from vector 1 when rounding using right triangles 
+      let adjustBy = radius / Math.tan(angle.radians / 2) * orthDirection;
+
+      // there are many ways of computing the point where the first segment intersects the circle, this is the one we chose:
+      // 1. compute the desired length of vector1
+      // 2. compute the unit vector of vector1 (it has length 1)
+      // 3. scale the vector to have our desired length
+      let newLength = getVectorLengthByVector(vector1) - adjustBy;
+      let v1unitLength = getNormalVectorByVector(vector1)
+      let v1new = scalarProd(newLength, v1unitLength);
+
+      // using the starting point and our "resized" vector1, we can compute the first intersection point, we call it point A
+      let pointA = vectorSum(startingPoint, v1new);
+
+      // from point A, we can compute the circles' center point by computing the orthogonal unit vector of vector1
+      // when we scale it to have length radius and add it to point A, we land at the circles center point 
+      let centerPoint = vectorSum(
+        pointA,
+        scalarProd(radius * orthDirection, getOrthogonalRightByVector(v1unitLength))
+      );
+
+      // update the input elements for the UX
+      if (!fixDelta.checked) {
+        let u = 1 / Math.tan(angle.radians / 2);
+        let h = radius * Math.sqrt(u * u + 1);
+
+        deltaInput.value = h - radius;
+      } else {
+        radiusInput.value = radius;
+      }
+
+      // using right triangles, we can compute the angle "inside" the circle
+      // why we need to correct by 180 degrees (=PI in radians), I'm not quite sure atm, but it works haha
+      let theta = Math.PI + 2 * (Math.PI - angle.radians / 2);
+      // computing the first leg is simple:
+      let u1 = { x: pointA.x - centerPoint.x, y: pointA.y - centerPoint.y };
+      drawLine(centerPoint, u1, "yellow");
+      // the second leg could be computed with basic geometry knowledge, but given that 
+      // we know the angle, we chose to just rotate the vector for the first leg by our angle theta
+      let u2 = rotateVector(u1, theta);
+      drawLine(centerPoint, u2, "green");
+
+      return {
+        center: centerPoint,
+        radius: radius
+      };
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      drawStatic();
+
+      // Draw movable line
+      ctx.beginPath();
+      ctx.moveTo(fixedEnd.x, fixedEnd.y);
+      ctx.lineTo(movable.x, movable.y);
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      // Draw draggable point
+      ctx.beginPath();
+      ctx.arc(movable.x, movable.y, 8, 0, Math.PI * 2);
+      ctx.fillStyle = "red";
+      ctx.fill();
+
+      // compute and draw circle that gives idea of rounding
+      let rounding = roundCorner(
+        fixedStart,
+        { x: fixedEnd.x - fixedStart.x, y: fixedEnd.y - fixedStart.y },
+        direction
+      );
+
+      ctx.beginPath();
+      ctx.arc(rounding.center.x, rounding.center.y, rounding.radius, 0, 2 * Math.PI);
+      ctx.strokeStyle = "lightgray";
+      ctx.stroke();
+    }
+
+    function isNearPoint(x, y, pt) {
+      return Math.hypot(x - pt.x, y - pt.y) < 12;
+    }
+
+    function updateDirection() {
+      direction.x = movable.x - fixedEnd.x;
+      direction.y = movable.y - fixedEnd.y;
+    }
+
+    canvas.addEventListener("mousedown", (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      if (isNearPoint(x, y, movable)) dragging = true;
+    });
+
+    canvas.addEventListener("mousemove", (e) => {
+      if (!dragging) return;
+      const rect = canvas.getBoundingClientRect();
+      movable.x = e.clientX - rect.left;
+      movable.y = e.clientY - rect.top;
+
+      updateDirection();
+
+      draw();
+    });
+
+    canvas.addEventListener("mouseup", () => dragging = false);
+    canvas.addEventListener("mouseleave", () => dragging = false);
+
+    deltaInput.addEventListener("change", draw);
+    radiusInput.addEventListener("change", draw);
+
+    draw();
+  </script>
+</body>
+
+</html>
