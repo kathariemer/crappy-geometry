@@ -169,7 +169,8 @@
         radius: radius,
         pointA: pointA,
         pointB: vectorSum(centerPoint, u2),
-        angle: angle2
+        angle: angle2,
+        greater180: orthDirection
       };
     }
 
@@ -181,15 +182,18 @@
       ctx2.stroke();
       ctx2.beginPath();
 
-      let endAngle = (rounding.angle.radians + 1.5 * Math.PI);
+      let greater180 = rounding.greater180 == -1;
+      let startAngle = greater180 ? Math.PI / 2 : 1.5 * Math.PI;
+      let endAngle = greater180 ? rounding.angle.radians + Math.PI / 2 : (rounding.angle.radians + 1.5 * Math.PI);
+
       ctx2.beginPath();
       ctx2.arc(
         rounding.center.x,
         rounding.center.y,
         rounding.radius,
-        Math.PI * 1.5,
+        startAngle,
         endAngle,
-        false);
+        greater180);
       ctx2.stroke();
     }
 
