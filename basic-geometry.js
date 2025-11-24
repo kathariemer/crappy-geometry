@@ -61,6 +61,10 @@ function vectorSum(v1, v2) {
     return { x: v1.x + v2.x, y: v1.y + v2.y };
 }
 
+function vectorTo(from, to) {
+    return { x: to.x - from.x, y: to.y - from.y };
+}
+
 function rotateVector(vector, theta) {
     // vector indicates a direction
     // theta is an angle in radians

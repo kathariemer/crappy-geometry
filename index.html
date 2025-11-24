@@ -45,12 +45,16 @@
     <label for="fix-delta">Fixed delta</label>
   </div>
 
-  <canvas id="canvas" width="500" height="400"></canvas>
+  <div style="display: flex; flex-direction: row; gap: 8px;">
+    <canvas id="canvas" width="500" height="400"></canvas>
+    <canvas id="canvas2" width="500" height="400"></canvas>
+  </div>
 
   <p>Angle = <span id="current-angle">?</span>.</p>
 
   <script>
     const canvas = document.getElementById("canvas");
+    const canvas2 = document.getElementById("canvas2");
     const radiusInput = document.getElementById("radius");
     const deltaInput = document.getElementById("delta");
     const fixDelta = document.getElementById("fix-delta");
@@ -59,6 +63,7 @@
     const notes = document.getElementById("notes");
 
     const ctx = canvas.getContext("2d");
+    const ctx2 = canvas2.getContext("2d");
 
     const fixedStart = { x: 100, y: 200 };
     const fixedEnd = { x: 300, y: 200 }; // horizontal fixed line
@@ -69,7 +74,7 @@
 
     let dragging = false;
 
-    function drawLine(from, direction, strokeStyle) {
+    function drawLine(from, direction, strokeStyle, ctx) {
       ctx.beginPath();
       ctx.moveTo(from.x, from.y);
       ctx.lineTo(from.x + direction.x, from.y + direction.y);
@@ -106,7 +111,6 @@
 
       // reverse vector 1 to get the correct angle between the vectors by having them "both point outwards"
       let angle = getAngleByVector(scalarProd(-1, vector1), vector2);
-      currentAngle.innerText = `${Math.round(angle.degrees)} degrees`;
 
       // get the radius either from the input element or defined by the distance between the corner and the circle
       let radius = fixDelta.checked ? radiusByFixedDelta({ d: deltaInput.value ?? 10, radians: angle.radians }) : radiusInput.value;
@@ -150,16 +154,43 @@
       let theta = Math.PI + 2 * (Math.PI - angle.radians / 2);
       // computing the first leg is simple:
       let u1 = { x: pointA.x - centerPoint.x, y: pointA.y - centerPoint.y };
-      drawLine(centerPoint, u1, "yellow");
+      drawLine(centerPoint, u1, "yellow", ctx);
       // the second leg could be computed with basic geometry knowledge, but given that 
       // we know the angle, we chose to just rotate the vector for the first leg by our angle theta
       let u2 = rotateVector(u1, theta);
-      drawLine(centerPoint, u2, "green");
+      drawLine(centerPoint, u2, "green", ctx);
+
+      // angle between 
+      let angle2 = getAngleByVector(u2, u1)
+      currentAngle.innerText = `lines: ${Math.round(angle.degrees)} degrees, circle: ${Math.round(angle2.degrees)}.`;
 
       return {
         center: centerPoint,
-        radius: radius
+        radius: radius,
+        pointA: pointA,
+        pointB: vectorSum(centerPoint, u2),
+        angle: angle2
       };
+    }
+
+    function drawPretty(rounding) {
+      ctx2.clearRect(0, 0, canvas2.width, canvas2.height);
+
+      drawLine(fixedStart, vectorTo(fixedStart, rounding.pointA), "black", ctx2);
+      drawLine(rounding.pointB, vectorTo(rounding.pointB, movable), "black", ctx2);
+      ctx2.stroke();
+      ctx2.beginPath();
+
+      let endAngle = (rounding.angle.radians + 1.5 * Math.PI);
+      ctx2.beginPath();
+      ctx2.arc(
+        rounding.center.x,
+        rounding.center.y,
+        rounding.radius,
+        Math.PI * 1.5,
+        endAngle,
+        false);
+      ctx2.stroke();
     }
 
     function draw() {
@@ -191,6 +222,8 @@
       ctx.arc(rounding.center.x, rounding.center.y, rounding.radius, 0, 2 * Math.PI);
       ctx.strokeStyle = "lightgray";
       ctx.stroke();
+
+      drawPretty(rounding);
     }
 
     function isNearPoint(x, y, pt) {
